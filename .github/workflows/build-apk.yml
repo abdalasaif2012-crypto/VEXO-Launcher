@@ -127,6 +127,8 @@ jobs:
 
           echo "ProfileIconCache patched."
 
+          grep -n "vexo_profile" "$FILE" || true
+
       - name: Make Play button red
         run: |
           set -e
@@ -154,6 +156,8 @@ jobs:
                   for x in range(img.width):
                       r, g, b, a = pixels[x, y]
 
+                      # Detect green pixels.
+                      # White text and black 9-patch markers stay unchanged.
                       if g > 80 and g > r * 1.25 and g > b * 1.15:
                           brightness = max(r, g, b)
 
@@ -182,21 +186,38 @@ jobs:
             exit 1
           fi
 
-          if grep -q 'name="minebutton_color"' "$COLORS"; then
+          python3 <<'PY'
+          from pathlib import Path
+          import re
 
-            sed -i \
-              's#<color name="minebutton_color">[^<]*</color>#<color name="minebutton_color">#E10600</color>#' \
-              "$COLORS"
+          path = Path("app_pojavlauncher/src/main/res/values/colors.xml")
+          text = path.read_text(encoding="utf-8")
 
-          else
+          new_color = "#E10600"
 
-            sed -i \
-              '/<\/resources>/i\    <color name="minebutton_color">#E10600</color>' \
-              "$COLORS"
+          pattern = r'<color\s+name="minebutton_color">.*?</color>'
 
-          fi
+          replacement = f'<color name="minebutton_color">{new_color}</color>'
 
-          echo "Account line changed to red."
+          if re.search(pattern, text, flags=re.DOTALL):
+              text = re.sub(
+                  pattern,
+                  replacement,
+                  text,
+                  count=1,
+                  flags=re.DOTALL
+              )
+          else:
+              text = text.replace(
+                  "</resources>",
+                  f'    {replacement}\n</resources>'
+              )
+
+          path.write_text(text, encoding="utf-8")
+
+          print("Account line color changed to red.")
+          print(replacement)
+          PY
 
           grep -n "minebutton_color" "$COLORS"
 
@@ -211,21 +232,41 @@ jobs:
             exit 1
           fi
 
-          if grep -q 'name="discord_invite"' "$STRINGS"; then
+          python3 <<'PY'
+          from pathlib import Path
+          import re
 
-            sed -i \
-              's#<string name="discord_invite"[^>]*>[^<]*</string>#<string name="discord_invite" translatable="false">https://discord.gg/K7MSmHZtf</string>#' \
-              "$STRINGS"
+          path = Path("app_pojavlauncher/src/main/res/values/strings.xml")
+          text = path.read_text(encoding="utf-8")
 
-          else
+          discord_url = "https://discord.gg/K7MSmHZtf"
 
-            sed -i \
-              '/<\/resources>/i\    <string name="discord_invite" translatable="false">https://discord.gg/K7MSmHZtf</string>' \
-              "$STRINGS"
+          pattern = r'<string\s+name="discord_invite"[^>]*>.*?</string>'
 
-          fi
+          replacement = (
+              f'<string name="discord_invite" '
+              f'translatable="false">{discord_url}</string>'
+          )
 
-          echo "Discord server changed."
+          if re.search(pattern, text, flags=re.DOTALL):
+              text = re.sub(
+                  pattern,
+                  replacement,
+                  text,
+                  count=1,
+                  flags=re.DOTALL
+              )
+          else:
+              text = text.replace(
+                  "</resources>",
+                  f"    {replacement}\n</resources>"
+              )
+
+          path.write_text(text, encoding="utf-8")
+
+          print("Discord server changed.")
+          print(discord_url)
+          PY
 
           grep -n "discord_invite" "$STRINGS"
 
@@ -234,40 +275,63 @@ jobs:
           set -e
 
           VALUES="app_pojavlauncher/src/main/res/values"
+          STRINGS="$VALUES/strings.xml"
           MANIFEST="app_pojavlauncher/src/main/AndroidManifest.xml"
 
           mkdir -p "$VALUES"
 
-          STRINGS="$VALUES/strings.xml"
+          python3 <<'PY'
+          from pathlib import Path
+          import re
 
-          echo "Setting application name to VEXO Launcher..."
+          path = Path("app_pojavlauncher/src/main/res/values/strings.xml")
+          text = path.read_text(encoding="utf-8")
 
-          if grep -q 'name="app_name"' "$STRINGS"; then
+          replacement = '<string name="app_name">VEXO Launcher</string>'
 
-            sed -i \
-              's#<string name="app_name"[^>]*>[^<]*</string>#<string name="app_name">VEXO Launcher</string>#' \
-              "$STRINGS"
+          pattern = r'<string\s+name="app_name"[^>]*>.*?</string>'
 
-          else
+          if re.search(pattern, text, flags=re.DOTALL):
+              text = re.sub(
+                  pattern,
+                  replacement,
+                  text,
+                  count=1,
+                  flags=re.DOTALL
+              )
+          else:
+              text = text.replace(
+                  "</resources>",
+                  f"    {replacement}\n</resources>"
+              )
 
-            sed -i \
-              '/<\/resources>/i\    <string name="app_name">VEXO Launcher</string>' \
-              "$STRINGS"
+          path.write_text(text, encoding="utf-8")
 
-          fi
+          print("Application name set to VEXO Launcher.")
+          PY
 
-          sed -i \
-            -E 's/android:label="[^"]*"/android:label="@string\/app_name"/g' \
-            "$MANIFEST"
+          python3 <<'PY'
+          from pathlib import Path
+          import re
 
-          echo "Application name set to VEXO Launcher."
+          path = Path("app_pojavlauncher/src/main/AndroidManifest.xml")
+          text = path.read_text(encoding="utf-8")
 
-          echo ""
-          echo "Checking app_name:"
-          grep -n "name=\"app_name\"" "$STRINGS"
+          text = re.sub(
+              r'android:label="[^"]*"',
+              'android:label="@string/app_name"',
+              text
+          )
 
-          echo ""
-          echo "Checking Manifest:"
+          path.write_text(text, encoding="utf-8")
+
+          print("Manifest application label set to VEXO Launcher.")
+          PY
+
+          echo "Checking app name:"
+          grep -n 'name="app_name"' "$STRINGS"
+
+          echo "Checking manifest label:"
           grep -n "android:label" "$MANIFEST"
 
       - name: Replace remaining Pojav icon references
@@ -382,11 +446,7 @@ jobs:
           echo "======================================"
 
           grep -q \
-            'name="minebutton_color"' \
-            "app_pojavlauncher/src/main/res/values/colors.xml"
-
-          grep -q \
-            '#E10600' \
+            'name="minebutton_color">#E10600</color>' \
             "app_pojavlauncher/src/main/res/values/colors.xml"
 
           echo "Account line is red."
