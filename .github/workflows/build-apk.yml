@@ -12,16 +12,9 @@ jobs:
 
     steps:
 
-      # ============================================================
-      # 1 - تحميل مشروع VEXO
-      # ============================================================
       - name: Checkout VEXO
         uses: actions/checkout@v4
 
-
-      # ============================================================
-      # 2 - تحميل ملفات Pojav الأصلية
-      # ============================================================
       - name: Get original PojavLauncher modules
         run: |
           set -e
@@ -43,52 +36,37 @@ jobs:
             "s/com.android.application' version '8.7.2'/com.android.application' version '8.11.1'/" \
             app_pojavlauncher/build.gradle
 
-
-      # ============================================================
-      # 3 - Java
-      # ============================================================
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-
-      # ============================================================
-      # 4 - Gradle
-      # ============================================================
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '8.13'
 
-
-      # ============================================================
-      # 5 - ImageMagick
-      # ============================================================
       - name: Install ImageMagick
         run: |
           sudo apt-get update
           sudo apt-get install -y imagemagick
 
+      # ============================================================
+      # FIND VEXO IMAGE
+      # ============================================================
 
-      # ============================================================
-      # 6 - العثور على صورة VEXO
-      # ============================================================
       - name: Find VEXO logo
         run: |
           set -e
 
-          echo "Searching for image files..."
+          echo "Searching for images..."
 
-          echo "Images in repository root:"
           find . -maxdepth 1 -type f \
             \( -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" \) \
-            -printf "%s bytes - %p\n" \
+            -printf "%s %p\n" \
             | sort -nr
 
-          # نختار أكبر صورة موجودة في جذر المستودع.
-          # هذا يتجنب مشكلة الاسم العشوائي مثل file_000000....png
           ICON=$(find . -maxdepth 1 -type f \
             \( -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" \) \
             -printf "%s %p\n" \
@@ -101,49 +79,43 @@ jobs:
             exit 1
           fi
 
-          echo ""
           echo "======================================"
-          echo "VEXO IMAGE SELECTED:"
+          echo "VEXO IMAGE:"
           echo "$ICON"
           echo "======================================"
-          echo ""
 
           echo "VEXO_ICON=$ICON" >> "$GITHUB_ENV"
 
+      # ============================================================
+      # CREATE VEXO PROFILE IMAGE
+      # ============================================================
 
-      # ============================================================
-      # 7 - استبدال صورة Profile الخاصة بـ Pojav
-      # ============================================================
-      - name: Replace Pojav profile icon
+      - name: Create VEXO profile image
         run: |
           set -e
 
-          APP="app_pojavlauncher"
-          RES="$APP/src/main/res"
-
-          ICON="$VEXO_ICON"
-
-          echo "Using image:"
-          echo "$ICON"
+          RES="app_pojavlauncher/src/main/res"
 
           mkdir -p "$RES/drawable"
 
-          # إنشاء صورة VEXO بحجم مناسب
-          convert "$ICON" \
+          echo "Creating VEXO profile image..."
+
+          convert "$VEXO_ICON" \
             -resize 512x512 \
             -gravity center \
             -background none \
             -extent 512x512 \
             "$RES/drawable/vexo_profile.png"
 
-          echo "Created:"
+          echo "VEXO profile image created."
+
           ls -lh "$RES/drawable/vexo_profile.png"
 
+      # ============================================================
+      # REPLACE POJAV DEFAULT PROFILE ICON
+      # ============================================================
 
-      # ============================================================
-      # 8 - استبدال ic_pojav_full
-      # ============================================================
-      - name: Replace Pojav default icon
+      - name: Replace Pojav default profile icon
         run: |
           set -e
 
@@ -165,33 +137,26 @@ jobs:
 
             rm -f "$FOUND"
 
-            cp "$RES/drawable/vexo_profile.png" \
-               "$RES/drawable/ic_pojav_full.png"
-
-            echo "ic_pojav_full replaced with VEXO."
-
           else
 
             echo "ic_pojav_full was not found."
-
-            echo "Searching all Pojav icons..."
-
-            find "$RES" -type f \
-              \( -iname "*pojav*" -o -iname "*profile*" \) \
-              -print
-
-            # إنشاء الملف حتى يكون متوفراً للكود
-            cp "$RES/drawable/vexo_profile.png" \
-               "$RES/drawable/ic_pojav_full.png"
-
-            echo "Created new ic_pojav_full.png."
+            echo "Creating it..."
 
           fi
 
+          cp "$RES/drawable/vexo_profile.png" \
+             "$RES/drawable/ic_pojav_full.png"
+
+          echo "======================================"
+          echo "ic_pojav_full replaced with VEXO"
+          echo "======================================"
+
+          ls -lh "$RES/drawable/ic_pojav_full.png"
 
       # ============================================================
-      # 9 - تعديل ProfileIconCache
+      # PATCH PROFILE ICON CACHE
       # ============================================================
+
       - name: Patch ProfileIconCache
         run: |
           set -e
@@ -202,26 +167,13 @@ jobs:
 
             echo "Patching ProfileIconCache.java"
 
-            python3 <<'PY'
-from pathlib import Path
+            sed -i \
+              's/R\.drawable\.ic_pojav_full/R.drawable.vexo_profile/g' \
+              "$FILE"
 
-file = Path(
-    "app_pojavlauncher/src/main/java/"
-    "net/kdt/pojavlaunch/profiles/ProfileIconCache.java"
-)
+            echo "ProfileIconCache patched."
 
-text = file.read_text()
-
-# استبدال صورة Pojav بصورة VEXO
-text = text.replace(
-    "R.drawable.ic_pojav_full",
-    "R.drawable.vexo_profile"
-)
-
-file.write_text(text)
-
-print("ProfileIconCache patched successfully.")
-PY
+            grep -n "vexo_profile" "$FILE" || true
 
           else
 
@@ -229,10 +181,10 @@ PY
 
           fi
 
+      # ============================================================
+      # REPLACE ANDROID APPLICATION ICON
+      # ============================================================
 
-      # ============================================================
-      # 10 - استبدال أيقونة Android
-      # ============================================================
       - name: Set VEXO Android app icon
         run: |
           set -e
@@ -283,10 +235,10 @@ PY
 
           echo "Android VEXO icon created."
 
+      # ============================================================
+      # APP NAME
+      # ============================================================
 
-      # ============================================================
-      # 11 - اسم التطبيق
-      # ============================================================
       - name: Set VEXO app name
         run: |
           set -e
@@ -308,34 +260,36 @@ EOF
 
           echo "VEXO Launcher name applied."
 
+      # ============================================================
+      # FINAL CHECK
+      # ============================================================
 
-      # ============================================================
-      # 12 - التأكد من أن صورة VEXO موجودة
-      # ============================================================
-      - name: Verify VEXO files
+      - name: Verify VEXO modifications
         run: |
           set -e
 
           echo "======================================"
-          echo "VEXO PROFILE"
+          echo "CHECK VEXO PROFILE"
           echo "======================================"
 
-          ls -lh \
+          test -f \
             app_pojavlauncher/src/main/res/drawable/vexo_profile.png
 
+          echo "VEXO profile OK."
+
           echo ""
-
           echo "======================================"
-          echo "POJAV DEFAULT ICON"
+          echo "CHECK POJAV ICON"
           echo "======================================"
 
-          ls -lh \
+          test -f \
             app_pojavlauncher/src/main/res/drawable/ic_pojav_full.png
 
-          echo ""
+          echo "Pojav default icon OK."
 
+          echo ""
           echo "======================================"
-          echo "PROFILE CACHE"
+          echo "CHECK PROFILE CODE"
           echo "======================================"
 
           grep -n "vexo_profile" \
@@ -343,23 +297,22 @@ EOF
             || true
 
           echo ""
-
           echo "======================================"
-          echo "VERIFICATION COMPLETE"
+          echo "ALL VEXO CHECKS PASSED"
           echo "======================================"
-
 
       # ============================================================
-      # 13 - بناء APK
+      # BUILD APK
       # ============================================================
+
       - name: Build VEXO APK
         run: |
           gradle :app_pojavlauncher:assembleDebug --stacktrace
 
+      # ============================================================
+      # UPLOAD APK
+      # ============================================================
 
-      # ============================================================
-      # 14 - رفع APK
-      # ============================================================
       - name: Upload VEXO APK
         uses: actions/upload-artifact@v4
         with:
