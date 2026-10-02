@@ -14,7 +14,8 @@ jobs:
       - name: Download source
         uses: actions/checkout@v4
 
-      - name: Extract src.zip
+      
+         - name: Extract src.zip
         run: |
           mkdir -p app_pojavlauncher
           unzip -o src.zip -d app_pojavlauncher/
