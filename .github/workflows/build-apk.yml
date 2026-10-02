@@ -60,15 +60,8 @@ jobs:
 
           ICON="file_0000000081bc81f4b2f9275e96993131.png"
 
-          echo "Checking VEXO red logo..."
-
           if [ ! -f "$ICON" ]; then
             echo "ERROR: VEXO red logo not found!"
-            echo "Expected:"
-            echo "$ICON"
-            echo ""
-            echo "Root files:"
-            ls -lah
             exit 1
           fi
 
@@ -95,8 +88,6 @@ jobs:
             "$RES/drawable/vexo_profile.png"
 
           echo "VEXO profile image created."
-
-          ls -lh "$RES/drawable/vexo_profile.png"
 
       - name: Replace Pojav default profile icon
         run: |
@@ -136,15 +127,9 @@ jobs:
 
           echo "ProfileIconCache patched."
 
-          grep -n "vexo_profile" "$FILE" || true
-
       - name: Make Play button red
         run: |
           set -e
-
-          RES="app_pojavlauncher/src/main/res"
-
-          echo "Changing Play button from green to red..."
 
           python3 <<'PY'
           from pathlib import Path
@@ -169,9 +154,6 @@ jobs:
                   for x in range(img.width):
                       r, g, b, a = pixels[x, y]
 
-                      # Detect green pixels.
-                      # White text and black 9-patch markers
-                      # are preserved.
                       if g > 80 and g > r * 1.25 and g > b * 1.15:
                           brightness = max(r, g, b)
 
@@ -188,6 +170,105 @@ jobs:
           PY
 
           echo "Play button is now red."
+
+      - name: Make account line red
+        run: |
+          set -e
+
+          COLORS="app_pojavlauncher/src/main/res/values/colors.xml"
+
+          if [ ! -f "$COLORS" ]; then
+            echo "ERROR: colors.xml not found."
+            exit 1
+          fi
+
+          if grep -q 'name="minebutton_color"' "$COLORS"; then
+
+            sed -i \
+              's#<color name="minebutton_color">[^<]*</color>#<color name="minebutton_color">#E10600</color>#' \
+              "$COLORS"
+
+          else
+
+            sed -i \
+              '/<\/resources>/i\    <color name="minebutton_color">#E10600</color>' \
+              "$COLORS"
+
+          fi
+
+          echo "Account line changed to red."
+
+          grep -n "minebutton_color" "$COLORS"
+
+      - name: Change Discord server
+        run: |
+          set -e
+
+          STRINGS="app_pojavlauncher/src/main/res/values/strings.xml"
+
+          if [ ! -f "$STRINGS" ]; then
+            echo "ERROR: strings.xml not found."
+            exit 1
+          fi
+
+          if grep -q 'name="discord_invite"' "$STRINGS"; then
+
+            sed -i \
+              's#<string name="discord_invite"[^>]*>[^<]*</string>#<string name="discord_invite" translatable="false">https://discord.gg/K7MSmHZtf</string>#' \
+              "$STRINGS"
+
+          else
+
+            sed -i \
+              '/<\/resources>/i\    <string name="discord_invite" translatable="false">https://discord.gg/K7MSmHZtf</string>' \
+              "$STRINGS"
+
+          fi
+
+          echo "Discord server changed."
+
+          grep -n "discord_invite" "$STRINGS"
+
+      - name: Set VEXO application name
+        run: |
+          set -e
+
+          VALUES="app_pojavlauncher/src/main/res/values"
+          MANIFEST="app_pojavlauncher/src/main/AndroidManifest.xml"
+
+          mkdir -p "$VALUES"
+
+          STRINGS="$VALUES/strings.xml"
+
+          echo "Setting application name to VEXO Launcher..."
+
+          if grep -q 'name="app_name"' "$STRINGS"; then
+
+            sed -i \
+              's#<string name="app_name"[^>]*>[^<]*</string>#<string name="app_name">VEXO Launcher</string>#' \
+              "$STRINGS"
+
+          else
+
+            sed -i \
+              '/<\/resources>/i\    <string name="app_name">VEXO Launcher</string>' \
+              "$STRINGS"
+
+          fi
+
+          sed -i \
+            -E 's/android:label="[^"]*"/android:label="@string\/app_name"/g' \
+            "$MANIFEST"
+
+          echo "Application name set to VEXO Launcher."
+
+          echo ""
+          echo "Checking app_name:"
+          grep -n "name=\"app_name\"" "$STRINGS"
+
+          echo ""
+          echo "Checking Manifest:"
+          grep -n "android:label" "$MANIFEST"
 
       - name: Replace remaining Pojav icon references
         run: |
@@ -248,30 +329,7 @@ jobs:
           cp "$RES/mipmap-xxxhdpi/ic_launcher.png" \
              "$RES/mipmap-xxxhdpi/ic_launcher_round.png"
 
-          echo "VEXO red Android icons created."
-
-      - name: Set VEXO app name
-        run: |
-          set -e
-
-          VALUES="app_pojavlauncher/src/main/res/values"
-
-          mkdir -p "$VALUES"
-
-          printf '%s\n' \
-            '<?xml version="1.0" encoding="utf-8"?>' \
-            '<resources>' \
-            '    <string name="vexo_app_name">VEXO Launcher</string>' \
-            '</resources>' \
-            > "$VALUES/vexo_name.xml"
-
-          MANIFEST="app_pojavlauncher/src/main/AndroidManifest.xml"
-
-          sed -i \
-            's/android:label="@string\/app_name"/android:label="@string\/vexo_app_name"/' \
-            "$MANIFEST"
-
-          echo "VEXO Launcher name applied."
+          echo "VEXO Android icons created."
 
       - name: Set VEXO manifest icon
         run: |
@@ -294,33 +352,16 @@ jobs:
           set -e
 
           echo "======================================"
-          echo "CHECK RED VEXO LOGO"
+          echo "CHECK VEXO LOGO"
           echo "======================================"
 
           test -f \
             "file_0000000081bc81f4b2f9275e96993131.png"
 
-          echo "Red VEXO logo OK."
-
-          echo ""
-          echo "======================================"
-          echo "CHECK VEXO PROFILE"
-          echo "======================================"
-
           test -f \
             "app_pojavlauncher/src/main/res/drawable/vexo_profile.png"
 
-          echo "VEXO profile OK."
-
-          echo ""
-          echo "======================================"
-          echo "CHECK DEFAULT PROFILE"
-          echo "======================================"
-
-          test -f \
-            "app_pojavlauncher/src/main/res/drawable/ic_pojav_full.png"
-
-          echo "Default profile icon OK."
+          echo "VEXO logo OK."
 
           echo ""
           echo "======================================"
@@ -333,26 +374,48 @@ jobs:
           test -f \
             "app_pojavlauncher/src/main/res/drawable/mine_button_unfocused.9.png"
 
-          echo "Red Play button files OK."
+          echo "Play button OK."
 
           echo ""
           echo "======================================"
-          echo "CHECK PROFILE CODE"
+          echo "CHECK ACCOUNT LINE"
           echo "======================================"
 
-          grep -n \
-            "vexo_profile" \
-            "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/profiles/ProfileIconCache.java"
+          grep -q \
+            'name="minebutton_color"' \
+            "app_pojavlauncher/src/main/res/values/colors.xml"
+
+          grep -q \
+            '#E10600' \
+            "app_pojavlauncher/src/main/res/values/colors.xml"
+
+          echo "Account line is red."
+
+          echo ""
+          echo "======================================"
+          echo "CHECK DISCORD"
+          echo "======================================"
+
+          grep -q \
+            'https://discord.gg/K7MSmHZtf' \
+            "app_pojavlauncher/src/main/res/values/strings.xml"
+
+          echo "Discord server OK."
 
           echo ""
           echo "======================================"
           echo "CHECK APP NAME"
           echo "======================================"
 
-          test -f \
-            "app_pojavlauncher/src/main/res/values/vexo_name.xml"
+          grep -q \
+            'name="app_name">VEXO Launcher</string>' \
+            "app_pojavlauncher/src/main/res/values/strings.xml"
 
-          echo "VEXO app name OK."
+          grep -q \
+            'android:label="@string/app_name"' \
+            "app_pojavlauncher/src/main/AndroidManifest.xml"
+
+          echo "App name is VEXO Launcher."
 
           echo ""
           echo "======================================"
@@ -368,6 +431,6 @@ jobs:
       - name: Upload VEXO APK
         uses: actions/upload-artifact@v4
         with:
-          name: VEXO-Launcher-APK-RED
+          name: VEXO-Launcher-APK-FINAL
           path: "app_pojavlauncher/build/outputs/apk/debug/*.apk"
           if-no-files-found: error
