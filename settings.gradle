@@ -16,8 +16,8 @@ dependencyResolutionManagement {
 
 rootProject.name='VEXO Launcher'
 include ':app_pojavlauncher'
-
 include ':forge_installer'
+include ':arc_dns_injector'
 include ':glfw:jni_bindings'
 include ':mojoexec:jni_bindings'
 include ':sdl:jni_bindings'
