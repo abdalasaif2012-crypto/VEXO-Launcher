@@ -30,6 +30,42 @@ jobs:
 
           sed -i "s/com.android.application' version '8.7.2'/com.android.application' version '8.11.1'/" app_pojavlauncher/build.gradle
 
+      - name: Install image tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y imagemagick
+
+      - name: Replace launcher icon with VEXO logo
+        run: |
+          ICON=$(find . -maxdepth 1 -type f -iname "*.png" | head -n 1)
+
+          if [ -z "$ICON" ]; then
+            echo "ERROR: No PNG icon found in repository root."
+            exit 1
+          fi
+
+          echo "Using icon: $ICON"
+
+          RES="app_pojavlauncher/src/main/res"
+
+          mkdir -p "$RES/mipmap-mdpi"
+          mkdir -p "$RES/mipmap-hdpi"
+          mkdir -p "$RES/mipmap-xhdpi"
+          mkdir -p "$RES/mipmap-xxhdpi"
+          mkdir -p "$RES/mipmap-xxxhdpi"
+
+          convert "$ICON" -resize 48x48 "$RES/mipmap-mdpi/ic_launcher.png"
+          convert "$ICON" -resize 72x72 "$RES/mipmap-hdpi/ic_launcher.png"
+          convert "$ICON" -resize 96x96 "$RES/mipmap-xhdpi/ic_launcher.png"
+          convert "$ICON" -resize 144x144 "$RES/mipmap-xxhdpi/ic_launcher.png"
+          convert "$ICON" -resize 192x192 "$RES/mipmap-xxxhdpi/ic_launcher.png"
+
+          cp "$RES/mipmap-mdpi/ic_launcher.png" "$RES/mipmap-mdpi/ic_launcher_round.png"
+          cp "$RES/mipmap-hdpi/ic_launcher.png" "$RES/mipmap-hdpi/ic_launcher_round.png"
+          cp "$RES/mipmap-xhdpi/ic_launcher.png" "$RES/mipmap-xhdpi/ic_launcher_round.png"
+          cp "$RES/mipmap-xxhdpi/ic_launcher.png" "$RES/mipmap-xxhdpi/ic_launcher_round.png"
+          cp "$RES/mipmap-xxxhdpi/ic_launcher.png" "$RES/mipmap-xxxhdpi/ic_launcher_round.png"
+
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -45,13 +81,13 @@ jobs:
         run: |
           gradle projects
 
-      - name: Build Release APK
+      - name: Build Debug APK
         run: |
-          gradle :app_pojavlauncher:assembleRelease --stacktrace
+          gradle :app_pojavlauncher:assembleDebug --stacktrace
 
-      - name: Upload Release APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: VEXO-Launcher-Release
-          path: "app_pojavlauncher/build/outputs/apk/release/*.apk"
+          name: VEXO-Launcher-APK
+          path: "app_pojavlauncher/build/outputs/apk/debug/*.apk"
           if-no-files-found: error
