@@ -1,4 +1,3 @@
-
 name: Build APK
 
 on:
@@ -12,19 +11,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download source
+      - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Inspect source
+      - name: Extract source
         run: |
-          echo "===== ZIP CONTENTS ====="
-          unzip -l src.zip | head -200
-          echo "===== EXTRACT ====="
-          unzip -o src.zip
-          echo "===== BUILD FILES ====="
-          find . -maxdepth 6 -type f \( -name "build.gradle" -o -name "build.gradle.kts" -o -name "settings.gradle" \) -print
-          echo "===== DIRECTORIES ====="
-          find . -maxdepth 4 -type d -print | head -200
+          if [ -f src.zip ]; then
+            unzip -o src.zip
+          fi
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -32,22 +26,21 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '8.13'
 
-      - name: Show Gradle projects
+      - name: Build Debug APK
         run: |
-          gradle projects
-
-      - name: Build APK
-        run: |
-          gradle :app_pojavlauncher:tasks --all
+          gradle assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: VEXO-Launcher-APK
           path: "**/*.apk"
-          if-no-files-found: ignore
+          if-no-files-found: error
