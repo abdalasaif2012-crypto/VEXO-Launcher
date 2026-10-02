@@ -28,6 +28,8 @@ jobs:
           cp -a /tmp/pojav/forge_installer .
           cp -a /tmp/pojav/jre_lwjgl3glfw .
 
+          sed -i "s/com.android.application' version '8.7.2'/com.android.application' version '8.11.1'/" app_pojavlauncher/build.gradle
+
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
