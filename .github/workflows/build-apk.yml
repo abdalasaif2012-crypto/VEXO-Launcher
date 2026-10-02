@@ -47,11 +47,12 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Install ImageMagick
+      - name: Install ImageMagick and Pillow
         run: |
           set -e
+
           sudo apt-get update
-          sudo apt-get install -y imagemagick
+          sudo apt-get install -y imagemagick python3-pil
 
       - name: Check VEXO red logo
         run: |
@@ -136,6 +137,57 @@ jobs:
           echo "ProfileIconCache patched."
 
           grep -n "vexo_profile" "$FILE" || true
+
+      - name: Make Play button red
+        run: |
+          set -e
+
+          RES="app_pojavlauncher/src/main/res"
+
+          echo "Changing Play button from green to red..."
+
+          python3 <<'PY'
+          from pathlib import Path
+          from PIL import Image
+
+          root = Path("app_pojavlauncher/src/main/res")
+
+          files = [
+              root / "drawable" / "mine_button_focused.9.png",
+              root / "drawable" / "mine_button_unfocused.9.png",
+          ]
+
+          for path in files:
+              if not path.exists():
+                  print("Not found:", path)
+                  continue
+
+              img = Image.open(path).convert("RGBA")
+              pixels = img.load()
+
+              for y in range(img.height):
+                  for x in range(img.width):
+                      r, g, b, a = pixels[x, y]
+
+                      # Detect green pixels.
+                      # White text and black 9-patch markers
+                      # are preserved.
+                      if g > 80 and g > r * 1.25 and g > b * 1.15:
+                          brightness = max(r, g, b)
+
+                          nr = min(255, max(120, int(brightness * 1.15)))
+                          ng = max(0, int(g * 0.08))
+                          nb = max(0, int(b * 0.08))
+
+                          pixels[x, y] = (nr, ng, nb, a)
+
+              img.save(path)
+
+              print("Red button created:", path)
+
+          PY
+
+          echo "Play button is now red."
 
       - name: Replace remaining Pojav icon references
         run: |
@@ -269,6 +321,19 @@ jobs:
             "app_pojavlauncher/src/main/res/drawable/ic_pojav_full.png"
 
           echo "Default profile icon OK."
+
+          echo ""
+          echo "======================================"
+          echo "CHECK PLAY BUTTON"
+          echo "======================================"
+
+          test -f \
+            "app_pojavlauncher/src/main/res/drawable/mine_button_focused.9.png"
+
+          test -f \
+            "app_pojavlauncher/src/main/res/drawable/mine_button_unfocused.9.png"
+
+          echo "Red Play button files OK."
 
           echo ""
           echo "======================================"
