@@ -11,14 +11,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout source
+      - name: Checkout VEXO
         uses: actions/checkout@v4
 
-      - name: Extract source
+      - name: Get original PojavLauncher modules
         run: |
-          if [ -f src.zip ]; then
-            unzip -o src.zip
-          fi
+          git clone --depth 1 --branch v3_openjdk https://github.com/PojavLauncherTeam/PojavLauncher.git /tmp/pojav
+
+          rm -rf app_pojavlauncher
+          rm -rf arc_dns_injector
+          rm -rf forge_installer
+          rm -rf jre_lwjgl3glfw
+
+          cp -a /tmp/pojav/app_pojavlauncher .
+          cp -a /tmp/pojav/arc_dns_injector .
+          cp -a /tmp/pojav/forge_installer .
+          cp -a /tmp/pojav/jre_lwjgl3glfw .
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -31,20 +39,17 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Show Android SDK
+      - name: Show Gradle projects
         run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          ls -la "$ANDROID_HOME"
-          ls -la "$ANDROID_HOME/platforms" || true
-          ls -la "$ANDROID_HOME/build-tools" || true
+          gradle projects
 
       - name: Build Debug APK
         run: |
-          gradle assembleDebug --stacktrace
+          gradle :app_pojavlauncher:assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: VEXO-Launcher-APK
-          path: "**/*.apk"
+          path: "app_pojavlauncher/build/outputs/apk/debug/*.apk"
           if-no-files-found: error
