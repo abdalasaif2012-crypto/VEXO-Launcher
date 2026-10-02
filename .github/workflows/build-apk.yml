@@ -1,4 +1,4 @@
-name: Build VEXO Launcher
+name: Build VEXO Launcher APK
 
 on:
   workflow_dispatch:
@@ -15,14 +15,10 @@ jobs:
       - name: Checkout VEXO
         uses: actions/checkout@v4
 
-
       - name: Get original PojavLauncher modules
         run: |
-          set -e
-
           git clone --depth 1 --branch v3_openjdk \
-            https://github.com/PojavLauncherTeam/PojavLauncher.git \
-            /tmp/pojav
+            https://github.com/PojavLauncherTeam/PojavLauncher.git /tmp/pojav
 
           rm -rf app_pojavlauncher
           rm -rf arc_dns_injector
@@ -38,195 +34,219 @@ jobs:
             "s/com.android.application' version '8.7.2'/com.android.application' version '8.11.1'/" \
             app_pojavlauncher/build.gradle
 
-
-      - name: Install image tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y imagemagick
-
-
-      - name: Apply VEXO branding
-        run: |
-          set -e
-
-          APP="app_pojavlauncher"
-          RES="$APP/src/main/res"
-
-          echo "=============================="
-          echo "       VEXO BRANDING"
-          echo "=============================="
-
-          echo "Searching for VEXO logo..."
-
-          ICON=$(find . -maxdepth 1 -type f -iname "*.png" \
-            ! -iname "ic_modrinth.png" \
-            ! -iname "ic_launcher.png" \
-            ! -iname "ic_launcher_round.png" \
-            | head -n 1)
-
-          if [ -z "$ICON" ]; then
-            echo "ERROR: VEXO PNG was not found."
-            echo "PNG files in repository:"
-            find . -maxdepth 1 -type f -iname "*.png" -print
-            exit 1
-          fi
-
-          echo "Using VEXO icon: $ICON"
-
-
-          echo "Creating VEXO launcher icon..."
-
-          mkdir -p "$RES/drawable"
-
-          convert "$ICON" \
-            -resize 512x512 \
-            "$RES/drawable/vexo_launcher.png"
-
-
-          echo "Creating VEXO app name..."
-
-          mkdir -p "$RES/values"
-
-          cat > "$RES/values/vexo_branding.xml" <<'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <resources>
-              <string name="vexo_app_name">VEXO Launcher</string>
-          </resources>
-          EOF
-
-
-          echo "Changing Android manifest..."
-
-          python3 <<'PY'
-          from pathlib import Path
-
-          manifest = Path(
-              "app_pojavlauncher/src/main/AndroidManifest.xml"
-          )
-
-          text = manifest.read_text()
-
-          text = text.replace(
-              'android:label="@string/app_name"',
-              'android:label="@string/vexo_app_name"'
-          )
-
-          text = text.replace(
-              'android:icon="@mipmap/ic_launcher"',
-              'android:icon="@drawable/vexo_launcher"'
-          )
-
-          text = text.replace(
-              'android:roundIcon="@mipmap/ic_launcher_round"',
-              'android:roundIcon="@drawable/vexo_launcher"'
-          )
-
-          manifest.write_text(text)
-
-          print("Manifest updated.")
-          PY
-
-
-          echo "Fixing Java launcher icon references..."
-
-          python3 <<'PY'
-          from pathlib import Path
-
-          java_root = Path(
-              "app_pojavlauncher/src/main/java"
-          )
-
-          for file in java_root.rglob("*.java"):
-
-              text = file.read_text()
-
-              new_text = text.replace(
-                  "R.mipmap.ic_launcher",
-                  "R.drawable.vexo_launcher"
-              )
-
-              new_text = new_text.replace(
-                  "R.mipmap.ic_launcher_round",
-                  "R.drawable.vexo_launcher"
-              )
-
-              if new_text != text:
-                  file.write_text(new_text)
-                  print("Fixed:", file)
-          PY
-
-
-          echo "=============================="
-          echo "Checking VEXO icon..."
-          echo "=============================="
-
-          ls -lh "$RES/drawable/vexo_launcher.png"
-
-
-          echo "=============================="
-          echo "Checking manifest..."
-          echo "=============================="
-
-          grep -n \
-            "android:label\|android:icon\|android:roundIcon" \
-            "$APP/src/main/AndroidManifest.xml"
-
-
-          echo "=============================="
-          echo "VEXO BRANDING COMPLETE"
-          echo "=============================="
-
-
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '8.13'
 
-
-      - name: Show Gradle projects
+      - name: Install ImageMagick
         run: |
-          gradle projects
+          sudo apt-get update
+          sudo apt-get install -y imagemagick
 
+      # ============================================================
+      # VEXO PROFILE ICON
+      # ============================================================
+      - name: Replace Minecraft profile icon with VEXO
+        run: |
+          set -e
 
+          APP="app_pojavlauncher"
+          RES="$APP/src/main/res"
+
+          mkdir -p "$RES/drawable"
+
+          echo "Searching for VEXO logo..."
+
+          ICON=$(find . -maxdepth 1 -type f \
+            \( -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" \) \
+            -printf '%s %p\n' \
+            | sort -nr \
+            | head -n 1 \
+            | cut -d' ' -f2-)
+
+          if [ -z "$ICON" ]; then
+            echo "ERROR: VEXO image not found"
+            exit 1
+          fi
+
+          echo "Using VEXO image: $ICON"
+
+          convert "$ICON" \
+            -resize 512x512 \
+            -gravity center \
+            -background none \
+            -extent 512x512 \
+            "$RES/drawable/vexo_profile.png"
+
+          echo "VEXO profile image created."
+
+          # ----------------------------------------------------------
+          # Find profile-related Java files
+          # ----------------------------------------------------------
+
+          echo "Searching profile UI code..."
+
+          grep -RniE \
+            "setImageResource|ImageView|profile.*icon|icon.*profile|profileIcon" \
+            "$APP/src/main/java" \
+            > /tmp/profile_matches.txt || true
+
+          cat /tmp/profile_matches.txt || true
+
+          # ----------------------------------------------------------
+          # Replace drawable used by profile ImageViews
+          # ----------------------------------------------------------
+
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          root = Path("app_pojavlauncher/src/main/java")
+
+          for file in root.rglob("*.java"):
+              try:
+                  text = file.read_text(errors="ignore")
+              except:
+                  continue
+
+              low = text.lower()
+
+              # Only touch files related to profiles.
+              if "profile" not in low:
+                  continue
+
+              old = text
+
+              # Replace ImageView resources used by profile UI.
+              text = re.sub(
+                  r'(setImageResource\s*\(\s*R\.drawable\.)[A-Za-z0-9_]+(\s*\))',
+                  r'\1vexo_profile\2',
+                  text
+              )
+
+              # Also handle mipmap resources.
+              text = re.sub(
+                  r'(setImageResource\s*\(\s*R\.mipmap\.)[A-Za-z0-9_]+(\s*\))',
+                  r'R.drawable.vexo_profile\2',
+                  text
+              )
+
+              if text != old:
+                  file.write_text(text)
+                  print("Patched:", file)
+          PY
+
+          # ----------------------------------------------------------
+          # Replace profile XML image source if it exists
+          # ----------------------------------------------------------
+
+          find "$APP/src/main/res" -type f \
+            \( -name "*.xml" -o -name "*.XML" \) \
+            | while read FILE
+          do
+            if grep -qi "profile" "$FILE"; then
+              echo "Checking profile layout: $FILE"
+
+              sed -i -E \
+                's#(@drawable/|@mipmap/)[A-Za-z0-9_]+#@drawable/vexo_profile#g' \
+                "$FILE" || true
+            fi
+          done
+
+          echo "Profile icon replacement completed."
+
+      # ============================================================
+      # VEXO ANDROID APP ICON
+      # ============================================================
+      - name: Set VEXO Android app icon
+        run: |
+          set -e
+
+          APP="app_pojavlauncher"
+          RES="$APP/src/main/res"
+
+          ICON="$RES/drawable/vexo_profile.png"
+
+          for DENSITY in mdpi hdpi xhdpi xxhdpi xxxhdpi
+          do
+            mkdir -p "$RES/mipmap-$DENSITY"
+          done
+
+          convert "$ICON" -resize 48x48 \
+            "$RES/mipmap-mdpi/ic_launcher.png"
+
+          convert "$ICON" -resize 72x72 \
+            "$RES/mipmap-hdpi/ic_launcher.png"
+
+          convert "$ICON" -resize 96x96 \
+            "$RES/mipmap-xhdpi/ic_launcher.png"
+
+          convert "$ICON" -resize 144x144 \
+            "$RES/mipmap-xxhdpi/ic_launcher.png"
+
+          convert "$ICON" -resize 192x192 \
+            "$RES/mipmap-xxxhdpi/ic_launcher.png"
+
+          cp "$RES/mipmap-mdpi/ic_launcher.png" \
+             "$RES/mipmap-mdpi/ic_launcher_round.png"
+
+          cp "$RES/mipmap-hdpi/ic_launcher.png" \
+             "$RES/mipmap-hdpi/ic_launcher_round.png"
+
+          cp "$RES/mipmap-xhdpi/ic_launcher.png" \
+             "$RES/mipmap-xhdpi/ic_launcher_round.png"
+
+          cp "$RES/mipmap-xxhdpi/ic_launcher.png" \
+             "$RES/mipmap-xxhdpi/ic_launcher_round.png"
+
+          cp "$RES/mipmap-xxxhdpi/ic_launcher.png" \
+             "$RES/mipmap-xxxhdpi/ic_launcher_round.png"
+
+          echo "VEXO Android icon created."
+
+      # ============================================================
+      # APP NAME
+      # ============================================================
+      - name: Set VEXO app name
+        run: |
+          APP="app_pojavlauncher"
+          VALUES="$APP/src/main/res/values"
+
+          mkdir -p "$VALUES"
+
+          cat > "$VALUES/vexo_name.xml" <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <string name="vexo_app_name">VEXO Launcher</string>
+          </resources>
+          EOF
+
+          sed -i \
+            's/android:label="@string\/app_name"/android:label="@string\/vexo_app_name"/' \
+            "$APP/src/main/AndroidManifest.xml"
+
+          echo "App name changed to VEXO Launcher."
+
+      # ============================================================
+      # BUILD
+      # ============================================================
       - name: Build VEXO APK
         run: |
           gradle :app_pojavlauncher:assembleDebug --stacktrace
 
-
-      - name: Rename APK
-        run: |
-          set -e
-
-          APK=$(find \
-            app_pojavlauncher/build/outputs/apk/debug \
-            -type f \
-            -name "*.apk" \
-            | head -n 1)
-
-          if [ -z "$APK" ]; then
-            echo "ERROR: APK was not created."
-            exit 1
-          fi
-
-          cp "$APK" VEXO-Launcher.apk
-
-          echo "=============================="
-          echo "VEXO APK CREATED"
-          echo "=============================="
-
-          ls -lh VEXO-Launcher.apk
-
-
+      # ============================================================
+      # UPLOAD APK
+      # ============================================================
       - name: Upload VEXO APK
         uses: actions/upload-artifact@v4
         with:
-          name: VEXO-Launcher
-          path: VEXO-Launcher.apk
+          name: VEXO-Launcher-APK
+          path: "app_pojavlauncher/build/outputs/apk/debug/*.apk"
           if-no-files-found: error
