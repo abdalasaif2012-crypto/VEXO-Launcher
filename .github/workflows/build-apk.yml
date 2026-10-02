@@ -37,10 +37,14 @@ jobs:
 
       - name: Replace launcher icon with VEXO logo
         run: |
+          set -e
+
+          echo "Searching for VEXO PNG..."
+
           ICON=$(find . -maxdepth 1 -type f -iname "*.png" | head -n 1)
 
           if [ -z "$ICON" ]; then
-            echo "ERROR: No PNG icon found in repository root."
+            echo "ERROR: No PNG file found in repository root."
             exit 1
           fi
 
@@ -48,23 +52,64 @@ jobs:
 
           RES="app_pojavlauncher/src/main/res"
 
+          echo "Removing old Pojav launcher icons..."
+
+          rm -rf "$RES/mipmap-anydpi"
+          rm -rf "$RES/mipmap-anydpi-v26"
+
+          rm -f "$RES"/mipmap-*/ic_launcher.png
+          rm -f "$RES"/mipmap-*/ic_launcher_round.png
+
+          echo "Creating VEXO launcher icon folders..."
+
           mkdir -p "$RES/mipmap-mdpi"
           mkdir -p "$RES/mipmap-hdpi"
           mkdir -p "$RES/mipmap-xhdpi"
           mkdir -p "$RES/mipmap-xxhdpi"
           mkdir -p "$RES/mipmap-xxxhdpi"
 
-          convert "$ICON" -resize 48x48 "$RES/mipmap-mdpi/ic_launcher.png"
-          convert "$ICON" -resize 72x72 "$RES/mipmap-hdpi/ic_launcher.png"
-          convert "$ICON" -resize 96x96 "$RES/mipmap-xhdpi/ic_launcher.png"
-          convert "$ICON" -resize 144x144 "$RES/mipmap-xxhdpi/ic_launcher.png"
-          convert "$ICON" -resize 192x192 "$RES/mipmap-xxxhdpi/ic_launcher.png"
+          echo "Generating launcher icons..."
 
-          cp "$RES/mipmap-mdpi/ic_launcher.png" "$RES/mipmap-mdpi/ic_launcher_round.png"
-          cp "$RES/mipmap-hdpi/ic_launcher.png" "$RES/mipmap-hdpi/ic_launcher_round.png"
-          cp "$RES/mipmap-xhdpi/ic_launcher.png" "$RES/mipmap-xhdpi/ic_launcher_round.png"
-          cp "$RES/mipmap-xxhdpi/ic_launcher.png" "$RES/mipmap-xxhdpi/ic_launcher_round.png"
-          cp "$RES/mipmap-xxxhdpi/ic_launcher.png" "$RES/mipmap-xxxhdpi/ic_launcher_round.png"
+          convert "$ICON" -auto-orient -resize 48x48 \
+            "$RES/mipmap-mdpi/ic_launcher.png"
+
+          convert "$ICON" -auto-orient -resize 72x72 \
+            "$RES/mipmap-hdpi/ic_launcher.png"
+
+          convert "$ICON" -auto-orient -resize 96x96 \
+            "$RES/mipmap-xhdpi/ic_launcher.png"
+
+          convert "$ICON" -auto-orient -resize 144x144 \
+            "$RES/mipmap-xxhdpi/ic_launcher.png"
+
+          convert "$ICON" -auto-orient -resize 192x192 \
+            "$RES/mipmap-xxxhdpi/ic_launcher.png"
+
+          echo "Creating round launcher icons..."
+
+          cp "$RES/mipmap-mdpi/ic_launcher.png" \
+             "$RES/mipmap-mdpi/ic_launcher_round.png"
+
+          cp "$RES/mipmap-hdpi/ic_launcher.png" \
+             "$RES/mipmap-hdpi/ic_launcher_round.png"
+
+          cp "$RES/mipmap-xhdpi/ic_launcher.png" \
+             "$RES/mipmap-xhdpi/ic_launcher_round.png"
+
+          cp "$RES/mipmap-xxhdpi/ic_launcher.png" \
+             "$RES/mipmap-xxhdpi/ic_launcher_round.png"
+
+          cp "$RES/mipmap-xxxhdpi/ic_launcher.png" \
+             "$RES/mipmap-xxxhdpi/ic_launcher_round.png"
+
+          echo "VEXO icon replacement completed."
+
+          echo "Checking generated icons..."
+
+          find "$RES" -type f \( \
+            -name "ic_launcher.png" -o \
+            -name "ic_launcher_round.png" \
+          \) -print
 
       - name: Set up Java
         uses: actions/setup-java@v4
