@@ -11,9 +11,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
+      # =========================================
+      # 1. Download repository
+      # =========================================
       - name: Checkout VEXO
         uses: actions/checkout@v4
 
+
+      # =========================================
+      # 2. Get original PojavLauncher modules
+      # =========================================
       - name: Get original PojavLauncher modules
         run: |
           set -e
@@ -35,53 +43,69 @@ jobs:
             "s/com.android.application' version '8.7.2'/com.android.application' version '8.11.1'/" \
             app_pojavlauncher/build.gradle
 
+
+      # =========================================
+      # 3. Java
+      # =========================================
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
+
+      # =========================================
+      # 4. Gradle
+      # =========================================
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '8.13'
 
-      - name: Install ImageMagick
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y imagemagick
 
-      - name: Find VEXO logo
+      # =========================================
+      # 5. ImageMagick
+      # =========================================
+      - name: Install ImageMagick
         run: |
           set -e
 
-          echo "Searching for images..."
+          sudo apt-get update
+          sudo apt-get install -y imagemagick
 
-          find . -maxdepth 1 -type f \
-            \( -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" \) \
-            -printf "%s %p\n" \
-            | sort -nr
 
-          ICON=$(find . -maxdepth 1 -type f \
-            \( -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" \) \
-            -printf "%s %p\n" \
-            | sort -nr \
-            | head -n 1 \
-            | cut -d' ' -f2-)
+      # =========================================
+      # 6. Check VEXO.png
+      # =========================================
+      - name: Check VEXO logo
+        run: |
+          set -e
 
-          if [ -z "$ICON" ]; then
-            echo "ERROR: No image found in repository root."
+          echo "Checking VEXO logo..."
+
+          if [ ! -f "VEXO.png" ]; then
+            echo "======================================"
+            echo "ERROR: VEXO.png NOT FOUND"
+            echo "======================================"
+            echo ""
+            echo "Upload your VEXO logo to repository root."
+            echo "The filename must be exactly:"
+            echo ""
+            echo "VEXO.png"
+            echo ""
             exit 1
           fi
 
-          echo "======================================"
-          echo "SELECTED VEXO IMAGE:"
-          echo "$ICON"
-          echo "======================================"
+          echo "VEXO.png found."
 
-          echo "VEXO_ICON=$ICON" >> "$GITHUB_ENV"
+          file VEXO.png
+          ls -lh VEXO.png
 
-      - name: Create VEXO profile image
+
+      # =========================================
+      # 7. Create VEXO profile icon
+      # =========================================
+      - name: Create VEXO profile icon
         run: |
           set -e
 
@@ -89,74 +113,136 @@ jobs:
 
           mkdir -p "$RES/drawable"
 
-          echo "Creating VEXO profile image..."
+          echo "Creating VEXO profile icon..."
 
-          convert "$VEXO_ICON" \
+          convert "VEXO.png" \
             -resize 512x512 \
             -gravity center \
             -background none \
             -extent 512x512 \
             "$RES/drawable/vexo_profile.png"
 
-          echo "VEXO profile image created."
+          echo "VEXO profile icon created."
 
+          file "$RES/drawable/vexo_profile.png"
           ls -lh "$RES/drawable/vexo_profile.png"
 
-      - name: Replace Pojav default profile icon
+
+      # =========================================
+      # 8. Replace Pojav default profile image
+      # =========================================
+      - name: Replace Pojav default profile image
         run: |
           set -e
 
           RES="app_pojavlauncher/src/main/res"
 
-          echo "Searching for ic_pojav_full..."
+          echo "Searching for old Pojav profile icon..."
 
-          FOUND=$(find "$RES" -type f \
-            \( -iname "ic_pojav_full.png" \
-               -o -iname "ic_pojav_full.webp" \
-               -o -iname "ic_pojav_full.jpg" \
-               -o -iname "ic_pojav_full.jpeg" \) \
-            | head -n 1)
+          find "$RES" -type f \
+            \( \
+              -iname "ic_pojav_full.png" \
+              -o -iname "ic_pojav_full.webp" \
+              -o -iname "ic_pojav_full.jpg" \
+              -o -iname "ic_pojav_full.jpeg" \
+            \) \
+            -print
 
-          if [ -n "$FOUND" ]; then
-            echo "Found:"
-            echo "$FOUND"
-            rm -f "$FOUND"
-          else
-            echo "ic_pojav_full was not found."
-          fi
+          find "$RES" -type f \
+            \( \
+              -iname "ic_pojav_full.png" \
+              -o -iname "ic_pojav_full.webp" \
+              -o -iname "ic_pojav_full.jpg" \
+              -o -iname "ic_pojav_full.jpeg" \
+            \) \
+            -delete
 
-          cp "$RES/drawable/vexo_profile.png" \
-             "$RES/drawable/ic_pojav_full.png"
+          cp \
+            "$RES/drawable/vexo_profile.png" \
+            "$RES/drawable/ic_pojav_full.png"
 
-          echo "Pojav default profile icon replaced."
+          echo "Old Pojav profile image replaced."
 
           ls -lh "$RES/drawable/ic_pojav_full.png"
 
+
+      # =========================================
+      # 9. Patch ProfileIconCache.java
+      # =========================================
       - name: Patch ProfileIconCache
         run: |
           set -e
 
           FILE="app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/profiles/ProfileIconCache.java"
 
-          if [ -f "$FILE" ]; then
-            echo "Patching ProfileIconCache.java"
-
-            sed -i \
-              's/R\.drawable\.ic_pojav_full/R.drawable.vexo_profile/g' \
-              "$FILE"
-
-            echo "ProfileIconCache patched."
-
-            grep -n "vexo_profile" "$FILE" || true
-          else
-            echo "WARNING: ProfileIconCache.java not found."
+          if [ ! -f "$FILE" ]; then
+            echo "ERROR: ProfileIconCache.java not found."
+            exit 1
           fi
 
-      - name: Set VEXO Android app icon
+          echo "Patching ProfileIconCache.java..."
+
+          sed -i \
+            's/R\.drawable\.ic_pojav_full/R.drawable.vexo_profile/g' \
+            "$FILE"
+
+          echo ""
+          echo "Checking patched code..."
+
+          grep -n \
+            "vexo_profile" \
+            "$FILE"
+
+          echo ""
+          echo "ProfileIconCache patched successfully."
+
+
+      # =========================================
+      # 10. Replace every ic_pojav_full Java reference
+      # =========================================
+      - name: Replace remaining Pojav profile references
+        run: |
+          set -e
+
+          JAVA_ROOT="app_pojavlauncher/src/main/java"
+
+          echo "Searching for remaining ic_pojav_full references..."
+
+          grep -RIn \
+            "R\.drawable\.ic_pojav_full" \
+            "$JAVA_ROOT" \
+            || true
+
+          grep -RIl \
+            "R\.drawable\.ic_pojav_full" \
+            "$JAVA_ROOT" \
+            | while read FILE
+            do
+              echo "Patching: $FILE"
+
+              sed -i \
+                's/R\.drawable\.ic_pojav_full/R.drawable.vexo_profile/g' \
+                "$FILE"
+            done
+
+          echo ""
+          echo "Remaining references:"
+
+          grep -RIn \
+            "R\.drawable\.ic_pojav_full" \
+            "$JAVA_ROOT" \
+            || true
+
+
+      # =========================================
+      # 11. Create Android VEXO launcher icons
+      # =========================================
+      - name: Create VEXO Android app icon
         run: |
           set -e
 
           RES="app_pojavlauncher/src/main/res"
+
           ICON="$RES/drawable/vexo_profile.png"
 
           mkdir -p "$RES/mipmap-mdpi"
@@ -185,23 +271,32 @@ jobs:
             -resize 192x192 \
             "$RES/mipmap-xxxhdpi/ic_launcher.png"
 
-          cp "$RES/mipmap-mdpi/ic_launcher.png" \
-             "$RES/mipmap-mdpi/ic_launcher_round.png"
+          cp \
+            "$RES/mipmap-mdpi/ic_launcher.png" \
+            "$RES/mipmap-mdpi/ic_launcher_round.png"
 
-          cp "$RES/mipmap-hdpi/ic_launcher.png" \
-             "$RES/mipmap-hdpi/ic_launcher_round.png"
+          cp \
+            "$RES/mipmap-hdpi/ic_launcher.png" \
+            "$RES/mipmap-hdpi/ic_launcher_round.png"
 
-          cp "$RES/mipmap-xhdpi/ic_launcher.png" \
-             "$RES/mipmap-xhdpi/ic_launcher_round.png"
+          cp \
+            "$RES/mipmap-xhdpi/ic_launcher.png" \
+            "$RES/mipmap-xhdpi/ic_launcher_round.png"
 
-          cp "$RES/mipmap-xxhdpi/ic_launcher.png" \
-             "$RES/mipmap-xxhdpi/ic_launcher_round.png"
+          cp \
+            "$RES/mipmap-xxhdpi/ic_launcher.png" \
+            "$RES/mipmap-xxhdpi/ic_launcher_round.png"
 
-          cp "$RES/mipmap-xxxhdpi/ic_launcher.png" \
-             "$RES/mipmap-xxxhdpi/ic_launcher_round.png"
+          cp \
+            "$RES/mipmap-xxxhdpi/ic_launcher.png" \
+            "$RES/mipmap-xxxhdpi/ic_launcher_round.png"
 
-          echo "Android VEXO icon created."
+          echo "VEXO Android icons created."
 
+
+      # =========================================
+      # 12. Set Android application name
+      # =========================================
       - name: Set VEXO app name
         run: |
           set -e
@@ -217,65 +312,153 @@ jobs:
             '</resources>' \
             > "$VALUES/vexo_name.xml"
 
+          MANIFEST="app_pojavlauncher/src/main/AndroidManifest.xml"
+
           sed -i \
             's/android:label="@string\/app_name"/android:label="@string\/vexo_app_name"/' \
-            app_pojavlauncher/src/main/AndroidManifest.xml
+            "$MANIFEST"
 
           echo "VEXO Launcher name applied."
 
+
+      # =========================================
+      # 13. Force Android manifest icon
+      # =========================================
+      - name: Set VEXO manifest icon
+        run: |
+          set -e
+
+          MANIFEST="app_pojavlauncher/src/main/AndroidManifest.xml"
+
+          echo "Patching AndroidManifest.xml..."
+
+          sed -i \
+            's/android:icon="@mipmap\/ic_launcher"/android:icon="@drawable\/vexo_profile"/' \
+            "$MANIFEST"
+
+          sed -i \
+            's/android:roundIcon="@mipmap\/ic_launcher_round"/android:roundIcon="@drawable\/vexo_profile"/' \
+            "$MANIFEST"
+
+          echo ""
+          echo "Manifest icon check:"
+
+          grep -n \
+            'android:icon\|android:roundIcon\|android:label' \
+            "$MANIFEST"
+
+
+      # =========================================
+      # 14. Remove old Pojav launcher image
+      # =========================================
+      - name: Remove old Pojav launcher image
+        run: |
+          set -e
+
+          RES="app_pojavlauncher/src/main/res"
+
+          echo "Searching for old Pojav launcher resources..."
+
+          find "$RES" -type f \
+            \( \
+              -iname "pojavlauncher.png" \
+              -o -iname "ic_pojav_full.png" \
+            \) \
+            -print
+
+          echo "VEXO replacement resources are ready."
+
+
+      # =========================================
+      # 15. Verify VEXO changes
+      # =========================================
       - name: Verify VEXO modifications
         run: |
           set -e
 
           echo "======================================"
-          echo "CHECK VEXO PROFILE"
+          echo "VEXO LOGO"
           echo "======================================"
 
-          test -f \
-            app_pojavlauncher/src/main/res/drawable/vexo_profile.png
+          test -f "VEXO.png"
 
-          echo "VEXO profile OK."
+          echo "VEXO.png OK."
+
 
           echo ""
           echo "======================================"
-          echo "CHECK POJAV ICON"
+          echo "VEXO PROFILE"
           echo "======================================"
 
           test -f \
-            app_pojavlauncher/src/main/res/drawable/ic_pojav_full.png
+            "app_pojavlauncher/src/main/res/drawable/vexo_profile.png"
 
-          echo "Pojav default icon OK."
+          echo "vexo_profile.png OK."
 
-          echo ""
-          echo "======================================"
-          echo "CHECK PROFILE CODE"
-          echo "======================================"
-
-          grep -n "vexo_profile" \
-            app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/profiles/ProfileIconCache.java \
-            || true
 
           echo ""
           echo "======================================"
-          echo "CHECK APP NAME"
+          echo "DEFAULT PROFILE ICON"
           echo "======================================"
 
           test -f \
-            app_pojavlauncher/src/main/res/values/vexo_name.xml
+            "app_pojavlauncher/src/main/res/drawable/ic_pojav_full.png"
+
+          echo "ic_pojav_full.png OK."
+
+
+          echo ""
+          echo "======================================"
+          echo "PROFILE CODE"
+          echo "======================================"
+
+          grep -n \
+            "vexo_profile" \
+            "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/profiles/ProfileIconCache.java"
+
+          echo "Profile code OK."
+
+
+          echo ""
+          echo "======================================"
+          echo "APP NAME"
+          echo "======================================"
+
+          test -f \
+            "app_pojavlauncher/src/main/res/values/vexo_name.xml"
 
           echo "VEXO app name OK."
+
+
+          echo ""
+          echo "======================================"
+          echo "MANIFEST"
+          echo "======================================"
+
+          grep -n \
+            'android:icon\|android:roundIcon\|android:label' \
+            "app_pojavlauncher/src/main/AndroidManifest.xml"
+
 
           echo ""
           echo "======================================"
           echo "ALL VEXO CHECKS PASSED"
           echo "======================================"
 
+
+      # =========================================
+      # 16. Build APK
+      # =========================================
       - name: Build VEXO APK
         run: |
           set -e
 
           gradle :app_pojavlauncher:assembleDebug --stacktrace
 
+
+      # =========================================
+      # 17. Upload APK
+      # =========================================
       - name: Upload VEXO APK
         uses: actions/upload-artifact@v4
         with:
