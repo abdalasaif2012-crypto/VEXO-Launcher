@@ -74,3 +74,4 @@ def findFirstLibsSubdirectory(File baseDir) {
             return true
         }
     }
+    }
