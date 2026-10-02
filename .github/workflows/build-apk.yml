@@ -1,4 +1,4 @@
-name: Build VEXO Launcher APK
+name: Build VEXO Launcher
 
 on:
   workflow_dispatch:
@@ -8,19 +8,21 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
 
       - name: Checkout VEXO
         uses: actions/checkout@v4
 
-      - name: Get original PojavLauncher modules
+      - name: Get original PojavLauncher v3_openjdk
         run: |
           set -e
 
-          git clone --depth 1 --branch v3_openjdk \
-            https://github.com/PojavLauncherTeam/PojavLauncher.git /tmp/pojav
+          git clone --depth 1 \
+            --branch v3_openjdk \
+            https://github.com/PojavLauncherTeam/PojavLauncher.git \
+            /tmp/pojav
 
           rm -rf app_pojavlauncher
           rm -rf arc_dns_injector
@@ -32,20 +34,13 @@ jobs:
           cp -a /tmp/pojav/forge_installer .
           cp -a /tmp/pojav/jre_lwjgl3glfw .
 
+      - name: Fix Android Gradle Plugin version
+        run: |
+          set -e
+
           sed -i \
             "s/com.android.application' version '8.7.2'/com.android.application' version '8.11.1'/" \
             app_pojavlauncher/build.gradle
-
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
-        with:
-          gradle-version: '8.13'
 
       - name: Install ImageMagick and Pillow
         run: |
@@ -54,135 +49,57 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y imagemagick python3-pil
 
-      - name: Check VEXO red logo
+      - name: Prepare VEXO logo
         run: |
           set -e
 
           ICON="file_0000000081bc81f4b2f9275e96993131.png"
 
           if [ ! -f "$ICON" ]; then
-            echo "ERROR: VEXO red logo not found!"
+            echo "ERROR: VEXO logo not found:"
+            echo "$ICON"
             exit 1
           fi
 
-          echo "VEXO red logo found:"
-          ls -lh "$ICON"
-
-          file "$ICON"
-
-          echo "VEXO_ICON=$ICON" >> "$GITHUB_ENV"
-
-      - name: Create VEXO profile image
-        run: |
-          set -e
-
-          RES="app_pojavlauncher/src/main/res"
-
-          mkdir -p "$RES/drawable"
-
-          convert "$VEXO_ICON" \
-            -resize 512x512 \
-            -gravity center \
-            -background none \
-            -extent 512x512 \
-            "$RES/drawable/vexo_profile.png"
-
-          echo "VEXO profile image created."
-
-      - name: Replace Pojav default profile icon
-        run: |
-          set -e
-
-          RES="app_pojavlauncher/src/main/res"
-
-          find "$RES" -type f \
-            \( \
-              -iname "ic_pojav_full.png" \
-              -o -iname "ic_pojav_full.webp" \
-              -o -iname "ic_pojav_full.jpg" \
-              -o -iname "ic_pojav_full.jpeg" \
-            \) \
-            -delete
-
-          cp \
-            "$RES/drawable/vexo_profile.png" \
-            "$RES/drawable/ic_pojav_full.png"
-
-          echo "Pojav default profile icon replaced."
-
-      - name: Patch ProfileIconCache
-        run: |
-          set -e
-
-          FILE="app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/profiles/ProfileIconCache.java"
-
-          if [ ! -f "$FILE" ]; then
-            echo "ERROR: ProfileIconCache.java not found."
-            exit 1
-          fi
-
-          sed -i \
-            's/R\.drawable\.ic_pojav_full/R.drawable.vexo_profile/g' \
-            "$FILE"
-
-          echo "ProfileIconCache patched."
-
-          grep -n "vexo_profile" "$FILE" || true
-
-      - name: Make Play button red
-        run: |
-          set -e
+          mkdir -p app_pojavlauncher/src/main/res/drawable
 
           python3 <<'PY'
           from pathlib import Path
           from PIL import Image
 
-          root = Path("app_pojavlauncher/src/main/res")
+          source = Path("file_0000000081bc81f4b2f9275e96993131.png")
+          target = Path(
+              "app_pojavlauncher/src/main/res/drawable/vexo_profile.png"
+          )
 
-          files = [
-              root / "drawable" / "mine_button_focused.9.png",
-              root / "drawable" / "mine_button_unfocused.9.png",
-          ]
+          img = Image.open(source).convert("RGBA")
 
-          for path in files:
-              if not path.exists():
-                  print("Not found:", path)
-                  continue
+          # Keep the logo square.
+          size = min(img.width, img.height)
 
-              img = Image.open(path).convert("RGBA")
-              pixels = img.load()
+          left = (img.width - size) // 2
+          top = (img.height - size) // 2
 
-              for y in range(img.height):
-                  for x in range(img.width):
-                      r, g, b, a = pixels[x, y]
+          img = img.crop(
+              (left, top, left + size, top + size)
+          )
 
-                      # Detect green pixels.
-                      # White text and black 9-patch markers stay unchanged.
-                      if g > 80 and g > r * 1.25 and g > b * 1.15:
-                          brightness = max(r, g, b)
+          img.thumbnail((512, 512), Image.Resampling.LANCZOS)
 
-                          nr = min(255, max(120, int(brightness * 1.15)))
-                          ng = max(0, int(g * 0.08))
-                          nb = max(0, int(b * 0.08))
+          target.parent.mkdir(parents=True, exist_ok=True)
+          img.save(target)
 
-                          pixels[x, y] = (nr, ng, nb, a)
-
-              img.save(path)
-
-              print("Red button created:", path)
-
+          print("Created:", target)
           PY
 
-          echo "Play button is now red."
-
-      - name: Make account line red
+      - name: Replace Pojav profile icon with VEXO
         run: |
           set -e
 
-          COLORS="app_pojavlauncher/src/main/res/values/colors.xml"
+          PROFILE_ICON="app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/profiles/ProfileIconCache.java"
 
-          if [ ! -f "$COLORS" ]; then
-            echo "ERROR: colors.xml not found."
+          if [ ! -f "$PROFILE_ICON" ]; then
+            echo "ERROR: ProfileIconCache.java not found."
             exit 1
           fi
 
@@ -190,38 +107,63 @@ jobs:
           from pathlib import Path
           import re
 
-          path = Path("app_pojavlauncher/src/main/res/values/colors.xml")
+          path = Path(
+              "app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/profiles/ProfileIconCache.java"
+          )
+
           text = path.read_text(encoding="utf-8")
 
-          new_color = "#E10600"
+          text2 = text.replace(
+              "R.drawable.ic_pojav_full",
+              "R.drawable.vexo_profile"
+          )
 
-          pattern = r'<color\s+name="minebutton_color">.*?</color>'
-
-          replacement = f'<color name="minebutton_color">{new_color}</color>'
-
-          if re.search(pattern, text, flags=re.DOTALL):
-              text = re.sub(
-                  pattern,
-                  replacement,
-                  text,
-                  count=1,
-                  flags=re.DOTALL
-              )
+          if text2 == text:
+              print("WARNING: R.drawable.ic_pojav_full was not found.")
           else:
-              text = text.replace(
-                  "</resources>",
-                  f'    {replacement}\n</resources>'
-              )
+              path.write_text(text2, encoding="utf-8")
+              print("Profile icon changed to VEXO.")
 
-          path.write_text(text, encoding="utf-8")
-
-          print("Account line color changed to red.")
-          print(replacement)
           PY
 
-          grep -n "minebutton_color" "$COLORS"
+      - name: Create VEXO Android icons
+        run: |
+          set -e
 
-      - name: Change Discord server
+          mkdir -p app_pojavlauncher/src/main/res/drawable
+
+          mkdir -p app_pojavlauncher/src/main/res/mipmap-mdpi
+          mkdir -p app_pojavlauncher/src/main/res/mipmap-hdpi
+          mkdir -p app_pojavlauncher/src/main/res/mipmap-xhdpi
+          mkdir -p app_pojavlauncher/src/main/res/mipmap-xxhdpi
+          mkdir -p app_pojavlauncher/src/main/res/mipmap-xxxhdpi
+
+          convert \
+            file_0000000081bc81f4b2f9275e96993131.png \
+            -resize 48x48 \
+            app_pojavlauncher/src/main/res/mipmap-mdpi/ic_launcher.png
+
+          convert \
+            file_0000000081bc81f4b2f9275e96993131.png \
+            -resize 72x72 \
+            app_pojavlauncher/src/main/res/mipmap-hdpi/ic_launcher.png
+
+          convert \
+            file_0000000081bc81f4b2f9275e96993131.png \
+            -resize 96x96 \
+            app_pojavlauncher/src/main/res/mipmap-xhdpi/ic_launcher.png
+
+          convert \
+            file_0000000081bc81f4b2f9275e96993131.png \
+            -resize 144x144 \
+            app_pojavlauncher/src/main/res/mipmap-xxhdpi/ic_launcher.png
+
+          convert \
+            file_0000000081bc81f4b2f9275e96993131.png \
+            -resize 192x192 \
+            app_pojavlauncher/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+
+      - name: Set VEXO app name
         run: |
           set -e
 
@@ -236,261 +178,228 @@ jobs:
           from pathlib import Path
           import re
 
-          path = Path("app_pojavlauncher/src/main/res/values/strings.xml")
-          text = path.read_text(encoding="utf-8")
-
-          discord_url = "https://discord.gg/K7MSmHZtf"
-
-          pattern = r'<string\s+name="discord_invite"[^>]*>.*?</string>'
-
-          replacement = (
-              f'<string name="discord_invite" '
-              f'translatable="false">{discord_url}</string>'
+          path = Path(
+              "app_pojavlauncher/src/main/res/values/strings.xml"
           )
 
-          if re.search(pattern, text, flags=re.DOTALL):
-              text = re.sub(
-                  pattern,
-                  replacement,
-                  text,
-                  count=1,
-                  flags=re.DOTALL
-              )
+          text = path.read_text(encoding="utf-8")
+
+          pattern = r'<string\s+name="app_name">.*?</string>'
+
+          replacement = (
+              '<string name="app_name">VEXO Launcher</string>'
+          )
+
+          new_text, count = re.subn(
+              pattern,
+              replacement,
+              text,
+              count=1,
+              flags=re.DOTALL
+          )
+
+          if count == 0:
+              print("WARNING: app_name was not found.")
           else:
-              text = text.replace(
-                  "</resources>",
-                  f"    {replacement}\n</resources>"
-              )
+              path.write_text(new_text, encoding="utf-8")
+              print("App name changed to VEXO Launcher.")
 
-          path.write_text(text, encoding="utf-8")
-
-          print("Discord server changed.")
-          print(discord_url)
           PY
 
-          grep -n "discord_invite" "$STRINGS"
-
-      - name: Set VEXO application name
+      - name: Set Discord server
         run: |
           set -e
 
-          VALUES="app_pojavlauncher/src/main/res/values"
-          STRINGS="$VALUES/strings.xml"
-          MANIFEST="app_pojavlauncher/src/main/AndroidManifest.xml"
-
-          mkdir -p "$VALUES"
+          STRINGS="app_pojavlauncher/src/main/res/values/strings.xml"
 
           python3 <<'PY'
           from pathlib import Path
           import re
 
-          path = Path("app_pojavlauncher/src/main/res/values/strings.xml")
+          path = Path(
+              "app_pojavlauncher/src/main/res/values/strings.xml"
+          )
+
           text = path.read_text(encoding="utf-8")
 
-          replacement = '<string name="app_name">VEXO Launcher</string>'
+          replacement_url = "https://discord.gg/K7MSmHZtf"
 
-          pattern = r'<string\s+name="app_name"[^>]*>.*?</string>'
+          pattern = r'(<string\s+name="discord_invite">).*?(</string>)'
 
-          if re.search(pattern, text, flags=re.DOTALL):
-              text = re.sub(
-                  pattern,
-                  replacement,
-                  text,
-                  count=1,
-                  flags=re.DOTALL
-              )
+          new_text, count = re.subn(
+              pattern,
+              lambda m: m.group(1) + replacement_url + m.group(2),
+              text,
+              count=1,
+              flags=re.DOTALL
+          )
+
+          if count == 0:
+              print("WARNING: discord_invite was not found.")
           else:
-              text = text.replace(
-                  "</resources>",
-                  f"    {replacement}\n</resources>"
-              )
+              path.write_text(new_text, encoding="utf-8")
+              print("Discord server changed.")
 
-          path.write_text(text, encoding="utf-8")
-
-          print("Application name set to VEXO Launcher.")
           PY
+
+      - name: Set VEXO application icon
+        run: |
+          set -e
+
+          MANIFEST="app_pojavlauncher/src/main/AndroidManifest.xml"
+
+          if [ ! -f "$MANIFEST" ]; then
+            echo "ERROR: AndroidManifest.xml not found."
+            exit 1
+          fi
 
           python3 <<'PY'
           from pathlib import Path
           import re
 
-          path = Path("app_pojavlauncher/src/main/AndroidManifest.xml")
+          path = Path(
+              "app_pojavlauncher/src/main/AndroidManifest.xml"
+          )
+
           text = path.read_text(encoding="utf-8")
 
           text = re.sub(
-              r'android:label="[^"]*"',
-              'android:label="@string/app_name"',
-              text
+              r'android:icon="@[^"]+"',
+              'android:icon="@drawable/vexo_profile"',
+              text,
+              count=1
           )
 
           path.write_text(text, encoding="utf-8")
 
-          print("Manifest application label set to VEXO Launcher.")
+          print("Manifest icon changed to VEXO.")
           PY
 
-          echo "Checking app name:"
-          grep -n 'name="app_name"' "$STRINGS"
-
-          echo "Checking manifest label:"
-          grep -n "android:label" "$MANIFEST"
-
-      - name: Replace remaining Pojav icon references
+      - name: Make Play button red
         run: |
           set -e
 
-          JAVA_ROOT="app_pojavlauncher/src/main/java"
+          python3 <<'PY'
+          from pathlib import Path
+          from PIL import Image
 
-          grep -RIl \
-            "R\.drawable\.ic_pojav_full" \
-            "$JAVA_ROOT" \
-            | while read FILE
-            do
-              sed -i \
-                's/R\.drawable\.ic_pojav_full/R.drawable.vexo_profile/g' \
-                "$FILE"
-            done
+          root = Path(
+              "app_pojavlauncher/src/main/res"
+          )
 
-      - name: Create VEXO Android app icon
+          files = [
+              root / "drawable" / "mine_button_focused.9.png",
+              root / "drawable" / "mine_button_unfocused.9.png",
+          ]
+
+          for path in files:
+
+              if not path.exists():
+                  print("Not found:", path)
+                  continue
+
+              img = Image.open(path).convert("RGBA")
+
+              pixels = img.load()
+
+              for y in range(img.height):
+                  for x in range(img.width):
+
+                      r, g, b, a = pixels[x, y]
+
+                      if (
+                          g > 80
+                          and g > r * 1.25
+                          and g > b * 1.15
+                      ):
+
+                          brightness = max(r, g, b)
+
+                          nr = min(
+                              255,
+                              max(
+                                  120,
+                                  int(brightness * 1.15)
+                              )
+                          )
+
+                          ng = max(
+                              0,
+                              int(g * 0.08)
+                          )
+
+                          nb = max(
+                              0,
+                              int(b * 0.08)
+                          )
+
+                          pixels[x, y] = (
+                              nr,
+                              ng,
+                              nb,
+                              a
+                          )
+
+              img.save(path)
+
+              print(
+                  "Play button made red:",
+                  path
+              )
+
+          PY
+
+      - name: Verify branding
         run: |
           set -e
 
-          RES="app_pojavlauncher/src/main/res"
-          ICON="$RES/drawable/vexo_profile.png"
-
-          mkdir -p "$RES/mipmap-mdpi"
-          mkdir -p "$RES/mipmap-hdpi"
-          mkdir -p "$RES/mipmap-xhdpi"
-          mkdir -p "$RES/mipmap-xxhdpi"
-          mkdir -p "$RES/mipmap-xxxhdpi"
-
-          convert "$ICON" -resize 48x48 \
-            "$RES/mipmap-mdpi/ic_launcher.png"
-
-          convert "$ICON" -resize 72x72 \
-            "$RES/mipmap-hdpi/ic_launcher.png"
-
-          convert "$ICON" -resize 96x96 \
-            "$RES/mipmap-xhdpi/ic_launcher.png"
-
-          convert "$ICON" -resize 144x144 \
-            "$RES/mipmap-xxhdpi/ic_launcher.png"
-
-          convert "$ICON" -resize 192x192 \
-            "$RES/mipmap-xxxhdpi/ic_launcher.png"
-
-          cp "$RES/mipmap-mdpi/ic_launcher.png" \
-             "$RES/mipmap-mdpi/ic_launcher_round.png"
-
-          cp "$RES/mipmap-hdpi/ic_launcher.png" \
-             "$RES/mipmap-hdpi/ic_launcher_round.png"
-
-          cp "$RES/mipmap-xhdpi/ic_launcher.png" \
-             "$RES/mipmap-xhdpi/ic_launcher_round.png"
-
-          cp "$RES/mipmap-xxhdpi/ic_launcher.png" \
-             "$RES/mipmap-xxhdpi/ic_launcher_round.png"
-
-          cp "$RES/mipmap-xxxhdpi/ic_launcher.png" \
-             "$RES/mipmap-xxxhdpi/ic_launcher_round.png"
-
-          echo "VEXO Android icons created."
-
-      - name: Set VEXO manifest icon
-        run: |
-          set -e
-
-          MANIFEST="app_pojavlauncher/src/main/AndroidManifest.xml"
-
-          sed -i \
-            's/android:icon="@mipmap\/ic_launcher"/android:icon="@drawable\/vexo_profile"/' \
-            "$MANIFEST"
-
-          sed -i \
-            's/android:roundIcon="@mipmap\/ic_launcher_round"/android:roundIcon="@drawable\/vexo_profile"/' \
-            "$MANIFEST"
-
-          echo "VEXO manifest icon applied."
-
-      - name: Verify VEXO modifications
-        run: |
-          set -e
-
-          echo "======================================"
-          echo "CHECK VEXO LOGO"
-          echo "======================================"
+          echo "========== VEXO CHECK =========="
 
           test -f \
-            "file_0000000081bc81f4b2f9275e96993131.png"
+            app_pojavlauncher/src/main/res/drawable/vexo_profile.png
 
-          test -f \
-            "app_pojavlauncher/src/main/res/drawable/vexo_profile.png"
+          grep -R \
+            "vexo_profile" \
+            app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/profiles/ProfileIconCache.java
 
-          echo "VEXO logo OK."
+          grep -R \
+            "VEXO Launcher" \
+            app_pojavlauncher/src/main/res/values/strings.xml
 
-          echo ""
-          echo "======================================"
-          echo "CHECK PLAY BUTTON"
-          echo "======================================"
+          grep -R \
+            "K7MSmHZtf" \
+            app_pojavlauncher/src/main/res/values/strings.xml
 
-          test -f \
-            "app_pojavlauncher/src/main/res/drawable/mine_button_focused.9.png"
+          grep -R \
+            'android:icon="@drawable/vexo_profile"' \
+            app_pojavlauncher/src/main/AndroidManifest.xml
 
-          test -f \
-            "app_pojavlauncher/src/main/res/drawable/mine_button_unfocused.9.png"
+          echo "================================"
 
-          echo "Play button OK."
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
-          echo ""
-          echo "======================================"
-          echo "CHECK ACCOUNT LINE"
-          echo "======================================"
-
-          grep -q \
-            'name="minebutton_color">#E10600</color>' \
-            "app_pojavlauncher/src/main/res/values/colors.xml"
-
-          echo "Account line is red."
-
-          echo ""
-          echo "======================================"
-          echo "CHECK DISCORD"
-          echo "======================================"
-
-          grep -q \
-            'https://discord.gg/K7MSmHZtf' \
-            "app_pojavlauncher/src/main/res/values/strings.xml"
-
-          echo "Discord server OK."
-
-          echo ""
-          echo "======================================"
-          echo "CHECK APP NAME"
-          echo "======================================"
-
-          grep -q \
-            'name="app_name">VEXO Launcher</string>' \
-            "app_pojavlauncher/src/main/res/values/strings.xml"
-
-          grep -q \
-            'android:label="@string/app_name"' \
-            "app_pojavlauncher/src/main/AndroidManifest.xml"
-
-          echo "App name is VEXO Launcher."
-
-          echo ""
-          echo "======================================"
-          echo "ALL VEXO CHECKS PASSED"
-          echo "======================================"
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.13'
 
       - name: Build VEXO APK
         run: |
           set -e
 
-          gradle :app_pojavlauncher:assembleDebug --stacktrace
+          gradle \
+            :app_pojavlauncher:assembleDebug \
+            --stacktrace \
+            --no-daemon
 
       - name: Upload VEXO APK
         uses: actions/upload-artifact@v4
         with:
-          name: VEXO-Launcher-APK-FINAL
-          path: "app_pojavlauncher/build/outputs/apk/debug/*.apk"
+          name: VEXO-Launcher-APK
+          path: |
+            app_pojavlauncher/build/outputs/apk/debug/*.apk
           if-no-files-found: error
