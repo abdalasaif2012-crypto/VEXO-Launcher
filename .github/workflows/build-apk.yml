@@ -25,10 +25,14 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.13'
+
       - name: Build APK
         run: |
-          chmod +x gradlew
-          ./gradlew :app_pojavlauncher:assembleDebug
+          gradle :app_pojavlauncher:assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
