@@ -45,13 +45,13 @@ jobs:
         run: |
           gradle projects
 
-      - name: Build Debug APK
+      - name: Build Release APK
         run: |
-          gradle :app_pojavlauncher:assembleDebug --stacktrace
+          gradle :app_pojavlauncher:assembleRelease --stacktrace
 
-      - name: Upload APK
+      - name: Upload Release APK
         uses: actions/upload-artifact@v4
         with:
-          name: VEXO-Launcher-APK
-          path: "app_pojavlauncher/build/outputs/apk/debug/*.apk"
+          name: VEXO-Launcher-Release
+          path: "app_pojavlauncher/build/outputs/apk/release/*.apk"
           if-no-files-found: error
